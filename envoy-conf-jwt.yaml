@@ -1,0 +1,107 @@
+node:
+  cluster: service_greeter
+  id: test-id
+
+static_resources:
+  listeners:
+  - name: listener_0
+    address:
+      socket_address: { address: 0.0.0.0, port_value: 8080 }
+    filter_chains:
+    - filters:     
+      - name: envoy.http_connection_manager
+        config:
+          stat_prefix: ingress_http
+          codec_type: AUTO
+          route_config:
+            name: local_route
+            virtual_hosts:
+            - name: local_service
+              domains: ["*"]
+              routes:
+              - match: { prefix: "/" }
+                route: { host_rewrite: httpbin.org, cluster: service_httpbin }
+          http_filters:
+          - name: envoy.filters.http.jwt_authn
+            typed_config:
+              "@type": type.googleapis.com/envoy.config.filter.http.jwt_authn.v2alpha.JwtAuthentication
+              providers:          
+                google-jwt:
+                  issuer: testing@secure.istio.io
+                  payload_in_metadata: "my_payload"
+                  remote_jwks:
+                    http_uri:
+                      uri: https://raw.githubusercontent.com/istio/istio/release-1.7/security/tools/jwt/samples/jwks.json
+                      cluster: jwt.raw.githubusercontent.com|443
+                      timeout:
+                        seconds: 5                      
+                  from_headers:
+                  - name: Authorization
+                    value_prefix: "Bearer "
+              rules:
+              - match:
+                  prefix: "/"
+                requires:
+                  provider_name: "google-jwt"            
+          - name: envoy.filters.http.rbac 
+            typed_config:
+              "@type": type.googleapis.com/envoy.extensions.filters.http.rbac.v3.RBAC       
+              rules: 
+                action: ALLOW
+                policies:
+                  "allow-sub-match-rule":
+                    permissions:
+                    - and_rules:
+                        rules:
+                        - header: { name: ":method", exact_match: "GET" }
+                        - header: { name: "User", exact_match: "sal" }
+                        - url_path:
+                            path: { prefix: "/" }
+                    principals:                 
+                    - metadata:
+                        filter: envoy.filters.http.jwt_authn
+                        path:
+                          - key: my_payload
+                          - key: sub
+                        value:
+                          string_match:
+                            exact:  "testing@secure.istio.io"                            
+          - name: envoy.filters.http.router
+      tls_context:
+        common_tls_context:
+          tls_certificates:
+          - certificate_chain:
+              filename: certs/server.crt
+            private_key:
+              filename: certs/server.key
+
+  clusters:
+  - name: service_httpbin
+    connect_timeout: 2s
+    type: LOGICAL_DNS
+    dns_lookup_family: V4_ONLY
+    lb_policy: ROUND_ROBIN
+    load_assignment:
+      cluster_name: service_httpbin
+      endpoints:
+      - lb_endpoints:
+        - endpoint:
+            address:
+              socket_address:
+                address: httpbin.org
+                port_value: 443
+    transport_socket:
+      name: envoy.transport_sockets.tls
+      typed_config:
+        "@type": type.googleapis.com/envoy.api.v2.auth.UpstreamTlsContext
+  - name: jwt.raw.githubusercontent.com|443
+    type: LOGICAL_DNS
+    dns_lookup_family: V4_ONLY
+    connect_timeout: 2s
+    lb_policy: ROUND_ROBIN
+    hosts:
+    - socket_address:
+        address: raw.githubusercontent.com
+        port_value: 443
+    tls_context: 
+      sni: raw.githubusercontent.com
