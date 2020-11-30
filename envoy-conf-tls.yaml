@@ -39,9 +39,10 @@ static_resources:
                     principals:
                     - authenticated:
                         principal_name:
-                          exact: "client-svc.domain.com"                            
+                          exact: "client-svc.domain.com"
           - name: envoy.filters.http.router
       tls_context:
+        require_client_certificate: true
         common_tls_context:
           tls_certificates:
           - certificate_chain:
