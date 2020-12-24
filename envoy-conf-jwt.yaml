@@ -25,7 +25,7 @@ static_resources:
           http_filters:
           - name: envoy.filters.http.jwt_authn
             typed_config:
-              "@type": type.googleapis.com/envoy.config.filter.http.jwt_authn.v2alpha.JwtAuthentication
+              "@type": type.googleapis.com/envoy.extensions.filters.http.jwt_authn.v3.JwtAuthentication
               providers:          
                 google-jwt:
                   issuer: testing@secure.istio.io
@@ -102,9 +102,16 @@ static_resources:
     dns_lookup_family: V4_ONLY
     connect_timeout: 2s
     lb_policy: ROUND_ROBIN
-    hosts:
-    - socket_address:
-        address: raw.githubusercontent.com
-        port_value: 443
-    tls_context: 
-      sni: raw.githubusercontent.com
+    load_assignment:
+      cluster_name: jwt.raw.githubusercontent.com|443
+      endpoints:
+      - lb_endpoints:
+        - endpoint:
+            address:
+              socket_address:
+                address: raw.githubusercontent.com
+                port_value: 443
+    transport_socket:
+      name: envoy.transport_sockets.tls
+      typed_config:
+        "@type": type.googleapis.com/envoy.extensions.transport_sockets.tls.v3.UpstreamTlsContext
