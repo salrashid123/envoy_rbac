@@ -9,8 +9,9 @@ static_resources:
       socket_address: { address: 0.0.0.0, port_value: 8080 }
     filter_chains:
     - filters:     
-      - name: envoy.http_connection_manager
-        config:
+      - name: envoy.filters.network.http_connection_manager
+        typed_config:
+          "@type": type.googleapis.com/envoy.extensions.filters.network.http_connection_manager.v3.HttpConnectionManager            
           stat_prefix: ingress_http
           codec_type: AUTO
           route_config:
@@ -20,7 +21,7 @@ static_resources:
               domains: ["*"]
               routes:
               - match: { prefix: "/" }
-                route: { host_rewrite: httpbin.org, cluster: service_httpbin }
+                route: { cluster: service_httpbin }
           http_filters:          
           - name: envoy.filters.http.rbac 
             typed_config:
@@ -41,17 +42,20 @@ static_resources:
                         principal_name:
                           exact: "client-svc.domain.com"
           - name: envoy.filters.http.router
-      tls_context:
-        require_client_certificate: true
-        common_tls_context:
-          tls_certificates:
-          - certificate_chain:
-              filename: certs/server.crt
-            private_key:
-              filename: certs/server.key
-          validation_context:
-            trusted_ca:
-              filename: certs/tls-ca-chain.crt 
+      transport_socket:
+        name: envoy.transport_sockets.tls
+        typed_config:
+          "@type": type.googleapis.com/envoy.extensions.transport_sockets.tls.v3.DownstreamTlsContext
+          require_client_certificate: true          
+          common_tls_context:
+            tls_certificates:
+            - certificate_chain:
+                filename: certs/server.crt
+              private_key:
+                filename: certs/server.key
+            validation_context:
+              trusted_ca:
+                filename: certs/tls-ca-chain.crt 
   clusters:
   - name: service_httpbin
     connect_timeout: 2s

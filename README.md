@@ -13,36 +13,37 @@ In both cases, the RBAC rules will also check for a custom header value: `Header
 
 Get envoy however you want
 
-```bash
-docker cp `docker create envoyproxy/envoy:v1.14.3`:/usr/local/bin/envoy .
+>> **NOTE * we are using the `envoy 1.17.0`
 ```
+docker cp `docker create envoyproxy/envoy-dev:latest`:/usr/local/bin/envoy .
 
+./envoy  version: 483dd3007f15e47deed0a29d945ff776abb37815/1.17.0-dev/Clean/RELEASE/BoringSSL
+```
 ### JWT
 
-First configure [https://www.envoyproxy.io/docs/envoy/latest/api-v2/config/filter/http/jwt_authn/v2alpha/config.proto](jwt_authn) in istio to do several things:
+First configure [https://github.com/envoyproxy/envoy/blob/master/api/envoy/extensions/filters/http/jwt_authn/v3/config.proto](jwt_authn) in istio to do several things:
 
 ```yaml
-- name: envoy.filters.http.jwt_authn
-  typed_config:
-    "@type": type.googleapis.com/envoy.config.filter.http.jwt_authn.v2alpha.JwtAuthentication
-    providers:          
-      google-jwt:
-        issuer: testing@secure.istio.io
-        payload_in_metadata: "my_payload"
-        remote_jwks:
-          http_uri:
-            uri: https://raw.githubusercontent.com/istio/istio/release-1.7/security/tools/jwt/samples/jwks.json
-            cluster: jwt.raw.githubusercontent.com|443
-            timeout:
-              seconds: 5                      
-        from_headers:
-        - name: Authorization
-          value_prefix: "Bearer "
-    rules:
-    - match:
-        prefix: "/"
-      requires:
-        provider_name: "google-jwt" 
+          - name: envoy.filters.http.jwt_authn
+            typed_config:
+              "@type": type.googleapis.com/envoy.config.filter.http.jwt_authn.v2alpha.JwtAuthentication
+              providers:          
+                google-jwt:
+                  issuer: testing@secure.istio.io
+                  payload_in_metadata: "my_payload"
+                  remote_jwks:
+                    http_uri:
+                      uri: https://raw.githubusercontent.com/istio/istio/release-1.7/security/tools/jwt/samples/jwks.json
+                      cluster: jwt.raw.githubusercontent.com|443
+                      timeout: 5s
+                  from_headers:
+                  - name: Authorization
+                    value_prefix: "Bearer "
+              rules:
+              - match:
+                  prefix: "/"
+                requires:
+                  provider_name: "google-jwt"      
 ```
 
 - decode the inbound JWT arriving as the `Authorization:` header value
