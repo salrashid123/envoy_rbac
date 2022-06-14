@@ -42,6 +42,9 @@ static_resources:
                         principal_name:
                           exact: "client-svc.domain.com"
           - name: envoy.filters.http.router
+            typed_config:
+              "@type": type.googleapis.com/envoy.extensions.filters.http.router.v3.Router     
+
       transport_socket:
         name: envoy.transport_sockets.tls
         typed_config:
@@ -57,11 +60,11 @@ static_resources:
               trusted_ca:
                 filename: certs/tls-ca-chain.crt 
   clusters:
+
   - name: service_httpbin
-    connect_timeout: 2s
-    type: LOGICAL_DNS
-    dns_lookup_family: V4_ONLY
-    lb_policy: ROUND_ROBIN
+    connect_timeout: 0.25s
+    type: strict_dns
+    lb_policy: round_robin
     load_assignment:
       cluster_name: service_httpbin
       endpoints:
@@ -74,4 +77,4 @@ static_resources:
     transport_socket:
       name: envoy.transport_sockets.tls
       typed_config:
-        "@type": type.googleapis.com/envoy.api.v2.auth.UpstreamTlsContext
+        "@type": type.googleapis.com/envoy.extensions.transport_sockets.tls.v3.UpstreamTlsContext
