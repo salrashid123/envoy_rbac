@@ -13,12 +13,11 @@ In both cases, the RBAC rules will also check for a custom header value: `Header
 
 Get envoy however you want
 
->> **NOTE * we are using the `envoy 1.17.0`
-```
-docker cp `docker create envoyproxy/envoy-dev:latest`:/usr/local/bin/envoy .
 
-./envoy  version: 483dd3007f15e47deed0a29d945ff776abb37815/1.17.0-dev/Clean/RELEASE/BoringSSL
+```bash
+docker cp `docker create envoyproxy/envoy-dev:latest`:/usr/local/bin/envoy .
 ```
+
 ### JWT
 
 First configure [https://github.com/envoyproxy/envoy/blob/master/api/envoy/extensions/filters/http/jwt_authn/v3/config.proto](jwt_authn) in istio to do several things:
@@ -81,7 +80,7 @@ Invoke Envoy with static JWT:
 export TOKEN=`curl -s https://raw.githubusercontent.com/istio/istio/release-1.7/security/tools/jwt/samples/demo.jwt`
 
 curl -v -H "host: http.domain.com"  --resolve  http.domain.com:8080:127.0.0.1 \
-  --cacert certs/tls-ca.crt \
+  --cacert certs/root-ca.crt \
   -H "Authorization: Bearer $TOKEN" \
   -H "User: sal" https://http.domain.com:8080/get
 ```
@@ -151,6 +150,7 @@ Note the JWT verification succeeded, then the dynamic metadata was emitted back 
 In the case above, the RBAC filter read in values present in metadata under namespace key `my_payload` and key `sub`.  This was a bit confusing to me because the order top-down of the `principals.metadata.path` in the config actually maps back in the hierarchy order
 
 from jwt_authn:
+
 ```
 dynamicMetadata: filter_metadata {
   key: "envoy.filters.http.jwt_authn"
@@ -165,6 +165,7 @@ dynamicMetadata: filter_metadata {
 ```
 
 rbac config
+
 ```yaml
 - name: envoy.filters.http.rbac 
   typed_config:
@@ -206,22 +207,23 @@ First note the specifications of the certs contained in this repo:
 
 - Client certificate
 
-Has a `X509v3 Subject Alternative Name:` value of  `DNS:client-svc.domain.com`
+Has a `X509v3 Subject Alternative Name:` value of  `DNS:client.domain.com`
 Envoy's RBAC filter only looks for DNS or IP SAN.  For some reason, it doesn't use EMAIL (i suppose its because thats not used in svc->svc mode)
 
 ```bash
 openssl x509 -in client-svc.crt -noout -text
 
-    Certificate:
-        Data:
-            Version: 3 (0x2)
-            Serial Number: 10 (0xa)
-            Signature Algorithm: sha1WithRSAEncryption
-            Issuer: C = US, O = Google, OU = Enterprise, CN = Enterprise Subordinate CA
-            Validity
-                Not Before: Oct 23 02:37:24 2020 GMT
-                Not After : Oct 23 02:37:24 2022 GMT
-            Subject: C = US, O = Google, OU = Enterprise, CN = client-svc@domain.com
+      Certificate:
+          Data:
+              Version: 3 (0x2)
+              Serial Number: 27 (0x1b)
+              Signature Algorithm: sha256WithRSAEncryption
+              Issuer: C=US, O=Google, OU=Enterprise, CN=Single Root CA
+              Validity
+                  Not Before: Jun 11 11:27:52 2024 GMT
+                  Not After : Jun 11 11:27:52 2034 GMT
+              Subject: L=US, O=Google, OU=Enterprise, CN=client.domain.com
+
 
         X509v3 extensions:
             X509v3 Key Usage: critical
@@ -230,8 +232,18 @@ openssl x509 -in client-svc.crt -noout -text
                 CA:FALSE
             X509v3 Extended Key Usage: 
                 TLS Web Client Authentication
+            X509v3 Subject Key Identifier: 
+                8F:4F:66:D1:B5:1A:B7:68:C2:CA:88:EB:8D:11:8B:87:C7:0B:41:9A
+            X509v3 Authority Key Identifier: 
+                EC:F0:EA:53:53:3F:9F:23:DC:C1:0E:31:10:37:07:DE:DE:E7:6E:F3
+            Authority Information Access: 
+                CA Issuers - URI:http://pki.esodemoapp2.com/ca/root-ca.cer
+            X509v3 CRL Distribution Points: 
+                Full Name:
+                  URI:http://pki.esodemoapp2.com/ca/root-ca.crl
             X509v3 Subject Alternative Name: 
-                DNS:client-svc.domain.com
+                DNS:client.domain.com
+
 
 ```
 
@@ -245,12 +257,12 @@ Certificate:
     Data:
         Version: 3 (0x2)
         Serial Number: 7 (0x7)
-        Signature Algorithm: sha1WithRSAEncryption
-        Issuer: C = US, O = Google, OU = Enterprise, CN = Enterprise Subordinate CA
+        Signature Algorithm: sha256WithRSAEncryption
+        Issuer: C=US, O=Google, OU=Enterprise, CN=Single Root CA
         Validity
-            Not Before: Jul 10 19:29:07 2020 GMT
-            Not After : Jul 10 19:29:07 2022 GMT
-        Subject: C = US, O = Google, OU = Enterprise, CN = http.domain.com
+            Not Before: Mar 29 19:06:50 2024 GMT
+            Not After : Mar 29 19:06:50 2034 GMT
+        Subject: C=US, O=Google, OU=Enterprise, CN=http.domain.com
 
         X509v3 extensions:
             X509v3 Key Usage: critical
@@ -259,6 +271,15 @@ Certificate:
                 CA:FALSE
             X509v3 Extended Key Usage: 
                 TLS Web Server Authentication
+            X509v3 Subject Key Identifier: 
+                1D:6A:C1:70:D6:6B:44:B5:DC:79:AD:76:A6:23:BB:FA:2D:12:3F:C1
+            X509v3 Authority Key Identifier: 
+                EC:F0:EA:53:53:3F:9F:23:DC:C1:0E:31:10:37:07:DE:DE:E7:6E:F3
+            Authority Information Access: 
+                CA Issuers - URI:http://pki.esodemoapp2.com/ca/root-ca.cer
+            X509v3 CRL Distribution Points: 
+                Full Name:
+                  URI:http://pki.esodemoapp2.com/ca/root-ca.crl
             X509v3 Subject Alternative Name: 
                 DNS:http.domain.com
 ```
@@ -268,7 +289,7 @@ You can generate and use your own certs with a sample CA [here](https://github.c
 
 Anyway Run envoy
 
-```
+```bash
 envoy -c envoy-conf-tls.yaml -l trace
 ```
 
@@ -277,7 +298,7 @@ Run Client
 ```bash
 curl -v -H "host: http.domain.com"  \
    --resolve  http.domain.com:8080:127.0.0.1 \
-   --cacert certs/tls-ca.crt --cert certs/client-svc.crt --key certs/client-svc.key \
+   --cacert certs/root-ca.crt --cert certs/client-svc.crt --key certs/client-svc.key \
    -H "User: sal" https://http.domain.com:8080/get
 ```
 
@@ -285,56 +306,17 @@ curl -v -H "host: http.domain.com"  \
 Note the Envoy log  negotiated the TLS connection and then extracted out the certificate specifications:
 
 ```log
-[2020-10-23 08:07:38.109][45831][debug][conn_handler] [external/envoy/source/server/connection_handler_impl.cc:422] [C0] new connection
-[2020-10-23 08:07:38.109][45831][trace][connection] [external/envoy/source/common/network/connection_impl.cc:506] [C0] socket event: 2
-[2020-10-23 08:07:38.109][45831][trace][connection] [external/envoy/source/common/network/connection_impl.cc:607] [C0] write ready
-[2020-10-23 08:07:38.109][45831][debug][connection] [external/envoy/source/extensions/transport_sockets/tls/ssl_socket.cc:190] [C0] handshake expecting read
-[2020-10-23 08:07:38.119][45831][trace][connection] [external/envoy/source/common/network/connection_impl.cc:506] [C0] socket event: 3
-[2020-10-23 08:07:38.119][45831][trace][connection] [external/envoy/source/common/network/connection_impl.cc:607] [C0] write ready
-[2020-10-23 08:07:38.125][45831][debug][connection] [external/envoy/source/extensions/transport_sockets/tls/ssl_socket.cc:190] [C0] handshake expecting read
-[2020-10-23 08:07:38.125][45831][trace][connection] [external/envoy/source/common/network/connection_impl.cc:544] [C0] read ready. dispatch_buffered_data=false
-[2020-10-23 08:07:38.125][45831][debug][connection] [external/envoy/source/extensions/transport_sockets/tls/ssl_socket.cc:190] [C0] handshake expecting read
-[2020-10-23 08:07:38.131][45831][trace][connection] [external/envoy/source/common/network/connection_impl.cc:506] [C0] socket event: 3
-[2020-10-23 08:07:38.131][45831][trace][connection] [external/envoy/source/common/network/connection_impl.cc:607] [C0] write ready
-[2020-10-23 08:07:38.133][45831][debug][connection] [external/envoy/source/extensions/transport_sockets/tls/ssl_socket.cc:175] [C0] handshake complete
-[2020-10-23 08:07:38.133][45831][trace][connection] [external/envoy/source/common/network/connection_impl.cc:544] [C0] read ready. dispatch_buffered_data=false
-[2020-10-23 08:07:38.133][45831][trace][connection] [external/envoy/source/extensions/transport_sockets/tls/ssl_socket.cc:80] [C0] ssl read returns: 93
-[2020-10-23 08:07:38.133][45831][trace][connection] [external/envoy/source/extensions/transport_sockets/tls/ssl_socket.cc:80] [C0] ssl read returns: -1
-[2020-10-23 08:07:38.133][45831][trace][connection] [external/envoy/source/extensions/transport_sockets/tls/ssl_socket.cc:154] [C0] ssl read 93 bytes
-[2020-10-23 08:07:38.133][45831][trace][http] [external/envoy/source/common/http/http1/codec_impl.cc:543] [C0] parsing 93 bytes
-[2020-10-23 08:07:38.133][45831][trace][http] [external/envoy/source/common/http/http1/codec_impl.cc:756] [C0] message begin
-[2020-10-23 08:07:38.133][45831][debug][http] [external/envoy/source/common/http/conn_manager_impl.cc:261] [C0] new stream
-[2020-10-23 08:07:38.134][45831][trace][http] [external/envoy/source/common/http/http1/codec_impl.cc:478] [C0] completed header: key=Host value=http.domain.com
-[2020-10-23 08:07:38.134][45831][trace][http] [external/envoy/source/common/http/http1/codec_impl.cc:478] [C0] completed header: key=User-Agent value=curl/7.72.0
-[2020-10-23 08:07:38.134][45831][trace][http] [external/envoy/source/common/http/http1/codec_impl.cc:478] [C0] completed header: key=Accept value=*/*
-[2020-10-23 08:07:38.134][45831][trace][http] [external/envoy/source/common/http/http1/codec_impl.cc:642] [C0] onHeadersCompleteBase
-[2020-10-23 08:07:38.134][45831][trace][http] [external/envoy/source/common/http/http1/codec_impl.cc:478] [C0] completed header: key=User value=sal
-[2020-10-23 08:07:38.134][45831][trace][http] [external/envoy/source/common/http/http1/codec_impl.cc:862] [C0] Server: onHeadersComplete size=4
-[2020-10-23 08:07:38.134][45831][trace][http] [external/envoy/source/common/http/http1/codec_impl.cc:733] [C0] message complete
-[2020-10-23 08:07:38.134][45831][trace][connection] [external/envoy/source/common/network/connection_impl.cc:315] [C0] readDisable: disable=true disable_count=0 state=0 buffer_length=93
-[2020-10-23 08:07:38.134][45831][debug][http] [external/envoy/source/common/http/conn_manager_impl.cc:808] [C0][S2535252511564349998] request headers complete (end_stream=true):
-':authority', 'http.domain.com'
+[2024-11-16 07:54:32.201][34474][debug][rbac] [source/extensions/filters/http/rbac/rbac_filter.cc:161] checking request: requestedServerName: , sourceIP: 127.0.0.1:48402, directRemoteIP: 127.0.0.1:48402, remoteIP: 127.0.0.1:48402,localAddress: 127.0.0.1:8080, ssl: uriSanPeerCertificate: , dnsSanPeerCertificate: client.domain.com, subjectPeerCertificate: CN=client.domain.com,OU=Enterprise,O=Google,L=US, headers: ':authority', 'http.domain.com'
 ':path', '/get'
 ':method', 'GET'
-'user-agent', 'curl/7.72.0'
-'accept', '*/*'
-'user', 'sal'
-[2020-10-23 08:07:38.134][45831][debug][http] [external/envoy/source/common/http/conn_manager_impl.cc:1377] [C0][S2535252511564349998] request end stream
-
-
-[2020-10-23 08:07:38.134][45831][debug][rbac] [external/envoy/source/extensions/filters/http/rbac/rbac_filter.cc:74] checking request: requestedServerName: , sourceIP: 127.0.0.1:45704, directRemoteIP: 127.0.0.1:45704, remoteIP: 127.0.0.1:45704,localAddress: 127.0.0.1:8080, ssl: uriSanPeerCertificate: , dnsSanPeerCertificate: client-svc.domain.com, subjectPeerCertificate: CN=client-svc@domain.com,OU=Enterprise,O=Google,C=US, headers: ':authority', 'http.domain.com'
-':path', '/get'
-':method', 'GET'
-'user-agent', 'curl/7.72.0'
+':scheme', 'https'
+'user-agent', 'curl/8.8.0'
 'accept', '*/*'
 'user', 'sal'
 'x-forwarded-proto', 'https'
-'x-request-id', '0f2fc3a2-bc5f-4930-a822-8f9d361ad540'
+'x-request-id', '9930b0f3-e0d3-43af-9191-7d5139003abc'
 , dynamicMetadata: 
-
-
-[2020-10-23 08:07:38.134][45831][debug][rbac] [external/envoy/source/extensions/filters/http/rbac/rbac_filter.cc:113] enforced allowed
-
+[2024-11-16 07:54:32.201][34474][debug][rbac] [source/extensions/filters/http/rbac/rbac_filter.cc:212] enforced allowed, matched policy allow-sub-match-rule
 ```
 
 

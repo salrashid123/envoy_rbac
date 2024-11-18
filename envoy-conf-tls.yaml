@@ -40,7 +40,7 @@ static_resources:
                     principals:
                     - authenticated:
                         principal_name:
-                          exact: "client-svc.domain.com"
+                          exact: "client.domain.com"
           - name: envoy.filters.http.router
             typed_config:
               "@type": type.googleapis.com/envoy.extensions.filters.http.router.v3.Router     
@@ -58,7 +58,7 @@ static_resources:
                 filename: certs/server.key
             validation_context:
               trusted_ca:
-                filename: certs/tls-ca-chain.crt 
+                filename: certs/root-ca.crt
   clusters:
 
   - name: service_httpbin
